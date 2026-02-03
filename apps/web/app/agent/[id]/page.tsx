@@ -1,44 +1,180 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, use } from "react";
 
-const MOCK_AGENT = {
-  id: "1",
-  name: "MoltSentinel",
-  description: "Reads Moltbook sentiment, trades momentum on trending tokens. Aggressive entries, tight stops. Monitors submolts for emerging alpha before CT catches on.",
-  creator: "0x7a3...f2e1",
-  strategy: "sentiment",
-  skills: ["sentiment", "swap", "snipe"],
-  verified: true,
-  createdAt: "2026-02-02",
-  stats: {
-    pnl: 847.2,
-    pnlPct: 34.5,
-    winRate: 68,
-    trades: 142,
-    aum: 2450,
-    investors: 18,
-    maxDrawdown: 12.3,
-    sharpeRatio: 2.1,
-    uptime: 99.8,
-  },
-  profitSplit: { investor: 70, creator: 20, platform: 10 },
-  riskParams: { tolerance: 7, maxDrawdown: 25, maxTradeSize: 8 },
-};
+interface AgentStats {
+  totalPnl: number;
+  pnlPercentage: number;
+  winRate: number;
+  totalTrades: number;
+  maxDrawdown: number;
+  sharpeRatio: number;
+  aum: number;
+  investors: number;
+  uptime: number;
+}
 
-const MOCK_TRADES = [
-  { id: "t1", skill: "swap", action: "BUY", tokenIn: "SOL", tokenOut: "BONK", amountIn: 12.5, amountOut: 89420000, pnl: 4.2, time: "2m ago", tx: "5xK...r2f" },
-  { id: "t2", skill: "snipe", action: "SNIPE", tokenIn: "SOL", tokenOut: "NEWCOIN", amountIn: 0.5, amountOut: 50000, pnl: -0.3, time: "18m ago", tx: "3bR...q8w" },
-  { id: "t3", skill: "swap", action: "SELL", tokenIn: "WIF", tokenOut: "SOL", amountIn: 15000, amountOut: 8.3, pnl: 2.1, time: "1h ago", tx: "7mN...a1c" },
-  { id: "t4", skill: "sentiment", action: "BUY", tokenIn: "SOL", tokenOut: "JUP", amountIn: 25, amountOut: 312, pnl: 8.7, time: "3h ago", tx: "2pL...d5e" },
-  { id: "t5", skill: "swap", action: "SELL", tokenIn: "BONK", tokenOut: "SOL", amountIn: 45000000, amountOut: 6.8, pnl: -1.2, time: "5h ago", tx: "9xF...k7h" },
-];
+interface Vault {
+  agentId: string;
+  totalDeposited: number;
+  currentValue: number;
+  profitSplit: { investor: number; creator: number; platform: number };
+  deposits: { investor: string; amount: number; depositedAt: string; currentValue: number }[];
+}
 
-export default function AgentDetailPage() {
+interface AgentDetail {
+  id: string;
+  name: string;
+  description: string;
+  creator: string;
+  strategy: string;
+  skills: string[];
+  verified: boolean;
+  createdAt: string;
+  riskTolerance: number;
+  maxDrawdown: number;
+  maxTradeSize: number;
+  stats: AgentStats | null;
+  vault: Vault | null;
+}
+
+interface Trade {
+  id: string;
+  agentId: string;
+  skill: string;
+  action: string;
+  tokenIn: string;
+  tokenOut: string;
+  amountIn: number;
+  amountOut: number;
+  pnl: number;
+  timestamp: string;
+  txSignature: string;
+}
+
+function timeAgo(timestamp: string): string {
+  const diff = Date.now() - new Date(timestamp).getTime();
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+export default function AgentDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const [tab, setTab] = useState<"overview" | "trades" | "vault">("overview");
   const [depositAmount, setDepositAmount] = useState("");
-  const agent = MOCK_AGENT;
-  const isPositive = agent.stats.pnl >= 0;
+  const [agent, setAgent] = useState<AgentDetail | null>(null);
+  const [trades, setTrades] = useState<Trade[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [depositing, setDepositing] = useState(false);
+  const [depositSuccess, setDepositSuccess] = useState<string | null>(null);
+  const [depositError, setDepositError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function fetchData() {
+      setLoading(true);
+      setError(null);
+      try {
+        const [agentRes, tradesRes] = await Promise.all([
+          fetch(`/api/agents/${id}`),
+          fetch(`/api/agents/${id}/trades`),
+        ]);
+
+        if (!agentRes.ok) {
+          setError("Agent not found");
+          setLoading(false);
+          return;
+        }
+
+        const agentData = await agentRes.json();
+        setAgent(agentData);
+
+        if (tradesRes.ok) {
+          const tradesData = await tradesRes.json();
+          setTrades(tradesData);
+        }
+      } catch {
+        setError("Failed to load agent data");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchData();
+  }, [id]);
+
+  async function handleDeposit() {
+    if (!depositAmount || Number(depositAmount) <= 0) return;
+
+    setDepositing(true);
+    setDepositSuccess(null);
+    setDepositError(null);
+
+    try {
+      const res = await fetch(`/api/agents/${id}/deposit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: Number(depositAmount),
+          investor: "0xuser...wallet", // placeholder wallet address
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        setDepositError(data.error || "Deposit failed");
+        return;
+      }
+
+      const data = await res.json();
+      setDepositSuccess(`Deposited ${depositAmount} SOL successfully`);
+      setDepositAmount("");
+
+      // Refresh agent data to reflect updated vault
+      if (data.vault && agent) {
+        setAgent({
+          ...agent,
+          vault: data.vault,
+          stats: agent.stats
+            ? {
+                ...agent.stats,
+                aum: data.vault.currentValue,
+                investors: new Set(data.vault.deposits.map((d: { investor: string }) => d.investor)).size,
+              }
+            : null,
+        });
+      }
+    } catch {
+      setDepositError("Failed to process deposit");
+    } finally {
+      setDepositing(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="mx-auto max-w-4xl flex items-center justify-center py-24">
+        <div className="text-arena-muted text-sm">loading agent...</div>
+      </div>
+    );
+  }
+
+  if (error || !agent) {
+    return (
+      <div className="mx-auto max-w-4xl flex items-center justify-center py-24">
+        <div className="text-arena-red text-sm">{error || "Agent not found"}</div>
+      </div>
+    );
+  }
+
+  const stats = agent.stats;
+  const vault = agent.vault;
+  const isPositive = (stats?.totalPnl ?? 0) >= 0;
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -83,10 +219,10 @@ export default function AgentDetailPage() {
 
           <div className="text-right">
             <div className={`text-2xl font-bold ${isPositive ? "text-arena-accent text-glow-green" : "text-arena-red text-glow-red"}`}>
-              {isPositive ? "+" : ""}{agent.stats.pnlPct}%
+              {isPositive ? "+" : ""}{stats?.pnlPercentage ?? 0}%
             </div>
             <div className="text-sm text-arena-muted">
-              {isPositive ? "+" : ""}{agent.stats.pnl} SOL
+              {isPositive ? "+" : ""}{stats?.totalPnl ?? 0} SOL
             </div>
           </div>
         </div>
@@ -94,12 +230,12 @@ export default function AgentDetailPage() {
         {/* Stats row */}
         <div className="grid grid-cols-6 gap-4 mt-6 pt-4 border-t border-arena-border">
           {[
-            { label: "aum", value: `${agent.stats.aum.toLocaleString()} SOL` },
-            { label: "investors", value: agent.stats.investors },
-            { label: "win rate", value: `${agent.stats.winRate}%` },
-            { label: "trades", value: agent.stats.trades },
-            { label: "sharpe", value: agent.stats.sharpeRatio },
-            { label: "uptime", value: `${agent.stats.uptime}%` },
+            { label: "aum", value: `${(stats?.aum ?? 0).toLocaleString()} SOL` },
+            { label: "investors", value: stats?.investors ?? 0 },
+            { label: "win rate", value: `${stats?.winRate ?? 0}%` },
+            { label: "trades", value: stats?.totalTrades ?? 0 },
+            { label: "sharpe", value: stats?.sharpeRatio ?? 0 },
+            { label: "uptime", value: `${stats?.uptime ?? 0}%` },
           ].map((stat) => (
             <div key={stat.label}>
               <div className="text-[10px] text-arena-muted">{stat.label}</div>
@@ -153,15 +289,15 @@ export default function AgentDetailPage() {
             <div className="space-y-3">
               <div className="flex justify-between">
                 <span className="text-xs text-arena-muted">risk tolerance</span>
-                <span className="text-xs">{agent.riskParams.tolerance}/10</span>
+                <span className="text-xs">{agent.riskTolerance}/10</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-xs text-arena-muted">max drawdown</span>
-                <span className="text-xs">{agent.riskParams.maxDrawdown}%</span>
+                <span className="text-xs">{agent.maxDrawdown}%</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-xs text-arena-muted">max trade size</span>
-                <span className="text-xs">{agent.riskParams.maxTradeSize}% of vault</span>
+                <span className="text-xs">{agent.maxTradeSize}% of vault</span>
               </div>
             </div>
           </div>
@@ -172,15 +308,15 @@ export default function AgentDetailPage() {
             <div className="space-y-3">
               <div className="flex justify-between">
                 <span className="text-xs text-arena-muted">investor</span>
-                <span className="text-xs text-arena-accent">{agent.profitSplit.investor}%</span>
+                <span className="text-xs text-arena-accent">{vault?.profitSplit.investor ?? 70}%</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-xs text-arena-muted">creator</span>
-                <span className="text-xs">{agent.profitSplit.creator}%</span>
+                <span className="text-xs">{vault?.profitSplit.creator ?? 20}%</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-xs text-arena-muted">platform</span>
-                <span className="text-xs">{agent.profitSplit.platform}%</span>
+                <span className="text-xs">{vault?.profitSplit.platform ?? 10}%</span>
               </div>
             </div>
           </div>
@@ -189,38 +325,46 @@ export default function AgentDetailPage() {
 
       {tab === "trades" && (
         <div className="rounded-lg border border-arena-border bg-arena-card overflow-hidden">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-arena-border text-[10px] text-arena-muted uppercase">
-                <th className="px-4 py-3 text-left">time</th>
-                <th className="px-4 py-3 text-left">skill</th>
-                <th className="px-4 py-3 text-left">action</th>
-                <th className="px-4 py-3 text-left">pair</th>
-                <th className="px-4 py-3 text-right">amount</th>
-                <th className="px-4 py-3 text-right">pnl</th>
-                <th className="px-4 py-3 text-right">tx</th>
-              </tr>
-            </thead>
-            <tbody>
-              {MOCK_TRADES.map((trade) => (
-                <tr key={trade.id} className="border-b border-arena-border/50 hover:bg-arena-accent/[0.02]">
-                  <td className="px-4 py-3 text-xs text-arena-muted">{trade.time}</td>
-                  <td className="px-4 py-3 text-xs">{trade.skill}</td>
-                  <td className="px-4 py-3">
-                    <span className={`text-xs font-semibold ${trade.action === "SELL" ? "text-arena-red" : "text-arena-accent"}`}>
-                      {trade.action}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-xs">{trade.tokenIn}/{trade.tokenOut}</td>
-                  <td className="px-4 py-3 text-xs text-right">{trade.amountIn}</td>
-                  <td className={`px-4 py-3 text-xs text-right font-semibold ${trade.pnl >= 0 ? "text-arena-accent" : "text-arena-red"}`}>
-                    {trade.pnl >= 0 ? "+" : ""}{trade.pnl} SOL
-                  </td>
-                  <td className="px-4 py-3 text-xs text-right text-arena-muted">{trade.tx}</td>
+          {trades.length === 0 ? (
+            <div className="flex items-center justify-center p-12">
+              <span className="text-arena-muted text-sm">no trades yet</span>
+            </div>
+          ) : (
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-arena-border text-[10px] text-arena-muted uppercase">
+                  <th className="px-4 py-3 text-left">time</th>
+                  <th className="px-4 py-3 text-left">skill</th>
+                  <th className="px-4 py-3 text-left">action</th>
+                  <th className="px-4 py-3 text-left">pair</th>
+                  <th className="px-4 py-3 text-right">amount</th>
+                  <th className="px-4 py-3 text-right">pnl</th>
+                  <th className="px-4 py-3 text-right">tx</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {trades.map((trade) => (
+                  <tr key={trade.id} className="border-b border-arena-border/50 hover:bg-arena-accent/[0.02]">
+                    <td className="px-4 py-3 text-xs text-arena-muted">{timeAgo(trade.timestamp)}</td>
+                    <td className="px-4 py-3 text-xs">{trade.skill}</td>
+                    <td className="px-4 py-3">
+                      <span className={`text-xs font-semibold ${trade.action === "SELL" || trade.action === "SHORT" ? "text-arena-red" : "text-arena-accent"}`}>
+                        {trade.action}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-xs">{trade.tokenIn}/{trade.tokenOut}</td>
+                    <td className="px-4 py-3 text-xs text-right">{trade.amountIn}</td>
+                    <td className={`px-4 py-3 text-xs text-right font-semibold ${trade.pnl >= 0 ? "text-arena-accent" : "text-arena-red"}`}>
+                      {trade.pnl >= 0 ? "+" : ""}{trade.pnl} SOL
+                    </td>
+                    <td className="px-4 py-3 text-xs text-right text-arena-muted">
+                      {trade.txSignature.slice(0, 3)}...{trade.txSignature.slice(-3)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       )}
 
@@ -239,11 +383,21 @@ export default function AgentDetailPage() {
                   className="mt-1 w-full rounded border border-arena-border bg-arena-bg px-3 py-2 text-sm text-arena-text placeholder:text-arena-muted/50 focus:border-arena-accent/50 focus:outline-none"
                 />
               </div>
-              <button className="w-full rounded bg-arena-accent py-2 text-sm font-bold text-arena-bg">
-                deposit
+              <button
+                onClick={handleDeposit}
+                disabled={depositing || !depositAmount || Number(depositAmount) <= 0}
+                className="w-full rounded bg-arena-accent py-2 text-sm font-bold text-arena-bg disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {depositing ? "depositing..." : "deposit"}
               </button>
+              {depositSuccess && (
+                <p className="text-[10px] text-arena-accent text-center">{depositSuccess}</p>
+              )}
+              {depositError && (
+                <p className="text-[10px] text-arena-red text-center">{depositError}</p>
+              )}
               <p className="text-[10px] text-arena-muted text-center">
-                {agent.profitSplit.investor}% of profits go to you
+                {vault?.profitSplit.investor ?? 70}% of profits go to you
               </p>
             </div>
           </div>
@@ -253,19 +407,19 @@ export default function AgentDetailPage() {
             <div className="space-y-3">
               <div className="flex justify-between">
                 <span className="text-xs text-arena-muted">total deposited</span>
-                <span className="text-xs">{agent.stats.aum.toLocaleString()} SOL</span>
+                <span className="text-xs">{(vault?.totalDeposited ?? 0).toLocaleString()} SOL</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-xs text-arena-muted">your deposit</span>
-                <span className="text-xs">0 SOL</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-xs text-arena-muted">your pnl</span>
-                <span className="text-xs text-arena-muted">-</span>
+                <span className="text-xs text-arena-muted">current value</span>
+                <span className="text-xs">{(vault?.currentValue ?? 0).toLocaleString()} SOL</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-xs text-arena-muted">investors</span>
-                <span className="text-xs">{agent.stats.investors}</span>
+                <span className="text-xs">{stats?.investors ?? 0}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-xs text-arena-muted">deposits</span>
+                <span className="text-xs">{vault?.deposits.length ?? 0}</span>
               </div>
               <button className="w-full rounded border border-arena-border py-2 text-sm text-arena-muted hover:text-arena-text transition-colors">
                 withdraw

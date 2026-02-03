@@ -11,6 +11,7 @@ const config: Config = {
         arena: {
           bg: "#0a0a0f",
           card: "#12121a",
+          "card-hover": "#16161f",
           border: "#1e1e2e",
           accent: "#00ff88",
           "accent-dim": "#00ff8820",
@@ -23,6 +24,9 @@ const config: Config = {
       },
       fontFamily: {
         mono: ["JetBrains Mono", "Fira Code", "monospace"],
+      },
+      animation: {
+        "pulse-slow": "pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite",
       },
     },
   },

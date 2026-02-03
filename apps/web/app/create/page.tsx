@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 const AVAILABLE_SKILLS = [
   { id: "swap", name: "Token Swap", icon: "&#8644;", risk: "low", color: "blue" },
@@ -30,6 +31,7 @@ const RISK_BADGE: Record<string, string> = {
 };
 
 export default function CreateAgentPage() {
+  const router = useRouter();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [strategy, setStrategy] = useState("");
@@ -38,12 +40,49 @@ export default function CreateAgentPage() {
   const [maxDrawdown, setMaxDrawdown] = useState(20);
   const [maxTradeSize, setMaxTradeSize] = useState(10);
   const [step, setStep] = useState(1);
+  const [deploying, setDeploying] = useState(false);
+  const [deployError, setDeployError] = useState<string | null>(null);
 
   const toggleSkill = (id: string) => {
     setSelectedSkills((prev) =>
       prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]
     );
   };
+
+  async function handleDeploy() {
+    setDeploying(true);
+    setDeployError(null);
+
+    try {
+      const res = await fetch("/api/agents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          description,
+          creator: "0xuser...wallet", // placeholder wallet address
+          strategy,
+          skills: selectedSkills,
+          riskTolerance,
+          maxDrawdown,
+          maxTradeSize,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        setDeployError(data.error || "Failed to create agent");
+        return;
+      }
+
+      const agent = await res.json();
+      router.push(`/agent/${agent.id}`);
+    } catch {
+      setDeployError("Failed to create agent. Please try again.");
+    } finally {
+      setDeploying(false);
+    }
+  }
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -270,15 +309,24 @@ export default function CreateAgentPage() {
             </div>
           </div>
 
+          {deployError && (
+            <p className="text-[10px] text-arena-red text-center">{deployError}</p>
+          )}
+
           <div className="flex gap-2">
             <button
               onClick={() => setStep(2)}
-              className="flex-1 rounded border border-arena-border py-2 text-sm text-arena-muted hover:text-arena-text transition-colors"
+              disabled={deploying}
+              className="flex-1 rounded border border-arena-border py-2 text-sm text-arena-muted hover:text-arena-text transition-colors disabled:opacity-50"
             >
               &larr; back
             </button>
-            <button className="flex-1 rounded bg-arena-accent py-2.5 text-sm font-bold text-arena-bg transition-all hover:bg-arena-accent/90">
-              deploy agent
+            <button
+              onClick={handleDeploy}
+              disabled={deploying}
+              className="flex-1 rounded bg-arena-accent py-2.5 text-sm font-bold text-arena-bg transition-all hover:bg-arena-accent/90 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {deploying ? "deploying..." : "deploy agent"}
             </button>
           </div>
 

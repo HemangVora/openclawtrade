@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { usePrivy, useLogin, useLogout } from "@privy-io/react-auth";
+import { usePrivyReady } from "@/components/providers/privy-provider";
 
 const NAV_ITEMS = [
   { href: "/", label: "agents" },
@@ -9,6 +11,87 @@ const NAV_ITEMS = [
   { href: "/create", label: "create agent" },
   { href: "/skills", label: "skills" },
 ];
+
+function truncateAddress(address: string): string {
+  return `${address.slice(0, 4)}...${address.slice(-4)}`;
+}
+
+function PrivyWalletButton() {
+  const { ready, authenticated, user } = usePrivy();
+  const { login } = useLogin();
+  const { logout } = useLogout();
+
+  const walletAddress = user?.wallet?.address;
+
+  if (!ready) {
+    return (
+      <button
+        disabled
+        className="rounded border border-arena-border bg-arena-card px-4 py-1.5 text-sm text-arena-muted"
+      >
+        loading...
+      </button>
+    );
+  }
+
+  if (authenticated && walletAddress) {
+    return (
+      <div className="flex items-center gap-2">
+        <span className="rounded bg-arena-accent/10 px-3 py-1.5 text-sm font-mono text-arena-accent">
+          {truncateAddress(walletAddress)}
+        </span>
+        <button
+          onClick={logout}
+          className="rounded border border-arena-red/30 bg-arena-red/5 px-3 py-1.5 text-sm text-arena-red transition-all hover:bg-arena-red/10 hover:border-arena-red/50"
+        >
+          disconnect
+        </button>
+      </div>
+    );
+  }
+
+  if (authenticated) {
+    return (
+      <div className="flex items-center gap-2">
+        <span className="rounded bg-arena-accent/10 px-3 py-1.5 text-sm text-arena-accent">
+          connected
+        </span>
+        <button
+          onClick={logout}
+          className="rounded border border-arena-red/30 bg-arena-red/5 px-3 py-1.5 text-sm text-arena-red transition-all hover:bg-arena-red/10 hover:border-arena-red/50"
+        >
+          disconnect
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      onClick={login}
+      className="rounded border border-arena-accent/30 bg-arena-accent/5 px-4 py-1.5 text-sm text-arena-accent transition-all hover:bg-arena-accent/10 hover:border-arena-accent/50"
+    >
+      connect wallet
+    </button>
+  );
+}
+
+function WalletButton() {
+  const privyConfigured = usePrivyReady();
+
+  if (!privyConfigured) {
+    return (
+      <button
+        disabled
+        className="rounded border border-arena-border bg-arena-card px-4 py-1.5 text-sm text-arena-muted cursor-not-allowed"
+      >
+        connect wallet
+      </button>
+    );
+  }
+
+  return <PrivyWalletButton />;
+}
 
 export function Navbar() {
   const pathname = usePathname();
@@ -42,9 +125,7 @@ export function Navbar() {
           ))}
         </div>
 
-        <button className="rounded border border-arena-accent/30 bg-arena-accent/5 px-4 py-1.5 text-sm text-arena-accent transition-all hover:bg-arena-accent/10 hover:border-arena-accent/50">
-          connect wallet
-        </button>
+        <WalletButton />
       </div>
     </nav>
   );
