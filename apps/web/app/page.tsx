@@ -9,6 +9,7 @@ interface ApiAgent {
   creator: string;
   strategy: string;
   skills: string[];
+  status: "live" | "stopped" | "error" | "deploying";
   verified: boolean;
   stats: {
     totalPnl: number;
@@ -31,6 +32,7 @@ function mapAgent(a: ApiAgent) {
     creator: a.creator,
     strategy: a.strategy,
     skills: a.skills,
+    status: a.status,
     verified: a.verified,
     stats: {
       pnl: a.stats?.totalPnl ?? 0,

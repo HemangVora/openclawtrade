@@ -13,6 +13,7 @@ interface AgentCardProps {
     creator: string;
     strategy: string;
     skills: readonly string[];
+    status: "live" | "stopped" | "error" | "deploying";
     stats: {
       pnl: number;
       pnlPct: number;
@@ -155,6 +156,19 @@ export function AgentCard({ agent, index = 0 }: AgentCardProps) {
                 <span className="rounded-md border border-arena-border bg-arena-bg px-1.5 py-0.5 text-[10px] text-arena-muted">
                   {agent.strategy}
                 </span>
+                {agent.status === "live" ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-arena-accent/10 border border-arena-accent/20 px-1.5 py-0.5 text-[10px] text-arena-accent">
+                    <span className="relative flex h-1.5 w-1.5">
+                      <span className="absolute inline-flex h-full w-full rounded-full bg-arena-accent opacity-75 animate-ping" />
+                      <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-arena-accent" />
+                    </span>
+                    live
+                  </span>
+                ) : (
+                  <span className="rounded-full bg-arena-muted/10 border border-arena-muted/20 px-1.5 py-0.5 text-[10px] text-arena-muted">
+                    {agent.status}
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -240,8 +254,6 @@ export function AgentCard({ agent, index = 0 }: AgentCardProps) {
           <div className="mt-3 flex items-center justify-between">
             <span className="text-[10px] text-arena-muted">
               {agent.stats.trades.toLocaleString()} trades
-              <span className="mx-1.5 text-arena-border">|</span>
-              max dd {agent.stats.maxDrawdown}%
             </span>
             <span className="text-[10px] text-arena-accent opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-1 group-hover:translate-x-0">
               view details &rarr;

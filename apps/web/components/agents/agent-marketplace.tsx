@@ -21,6 +21,7 @@ interface Agent {
   creator: string;
   strategy: string;
   skills: string[];
+  status: "live" | "stopped" | "error" | "deploying";
   verified: boolean;
   stats: {
     pnl: number;

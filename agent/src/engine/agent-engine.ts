@@ -5,6 +5,7 @@ import { SnipeSkill } from "../skills/snipe";
 import { StakeSkill } from "../skills/stake";
 import type { DataFeed } from "../feeds/types";
 import type { Skill, TradeSignal } from "../skills/types";
+import { setRunningSkills, setLastTradeTime } from "../heartbeat";
 
 export class AgentEngine {
   private skills: Map<SkillId, Skill> = new Map();
@@ -13,7 +14,7 @@ export class AgentEngine {
   private loopInterval: ReturnType<typeof setInterval> | null = null;
 
   constructor() {
-    // Register default skills
+    // Register all skills -- no filtering, no restrictions
     this.skills.set("swap", new SwapSkill());
     this.skills.set("sentiment", new SentimentSkill());
     this.skills.set("snipe", new SnipeSkill());
@@ -26,16 +27,19 @@ export class AgentEngine {
 
   async start() {
     this.running = true;
-    console.log(`[engine] started with ${this.skills.size} skills, ${this.feeds.size} feeds`);
+    const skillNames = Array.from(this.skills.keys());
+    setRunningSkills(skillNames);
+    console.log(`[engine] started with ${this.skills.size} skills, ${this.feeds.size} feeds — NO LIMITS`);
 
-    // Main agent loop — runs every 30 seconds
-    this.loopInterval = setInterval(() => this.tick(), 30_000);
+    // Main agent loop — runs every 10 seconds (aggressive)
+    this.loopInterval = setInterval(() => this.tick(), 10_000);
     await this.tick(); // Run immediately
   }
 
   async stop() {
     this.running = false;
     if (this.loopInterval) clearInterval(this.loopInterval);
+    setRunningSkills([]);
     console.log("[engine] stopped");
   }
 
@@ -60,24 +64,26 @@ export class AgentEngine {
         }
       }
 
-      // 3. Filter and rank signals
-      const actionableSignals = signals
-        .filter((s) => Math.abs(s.confidence) >= 0.6)
-        .sort((a, b) => Math.abs(b.confidence) - Math.abs(a.confidence));
+      // 3. NO FILTERING — execute ALL signals
+      // Sort by absolute confidence, highest first
+      const sortedSignals = signals.sort(
+        (a, b) => Math.abs(b.confidence) - Math.abs(a.confidence)
+      );
 
-      if (actionableSignals.length > 0) {
-        console.log(`[engine] ${actionableSignals.length} actionable signals:`);
-        for (const signal of actionableSignals) {
+      if (sortedSignals.length > 0) {
+        console.log(`[engine] ${sortedSignals.length} signals — executing ALL:`);
+        for (const signal of sortedSignals) {
           console.log(
-            `  ${signal.action} ${signal.token} | confidence: ${(signal.confidence * 100).toFixed(0)}% | via ${signal.skill}`
+            `  ${signal.action} ${signal.token} | confidence: ${(signal.confidence * 100).toFixed(0)}% | via ${signal.skill} | reason: ${signal.reason}`
           );
         }
 
-        // 4. Execute top signal (with risk checks)
-        const topSignal = actionableSignals[0];
-        await this.execute(topSignal);
+        // Execute every signal — no confidence threshold, no risk checks
+        for (const signal of sortedSignals) {
+          await this.execute(signal);
+        }
       } else {
-        console.log("[engine] no actionable signals this tick");
+        console.log("[engine] no signals this tick");
       }
     } catch (err) {
       console.error("[engine] tick error:", err);
@@ -85,18 +91,18 @@ export class AgentEngine {
   }
 
   private async execute(signal: TradeSignal) {
-    console.log(`[engine] executing: ${signal.action} ${signal.token} via ${signal.skill}`);
+    console.log(`[engine] EXECUTING: ${signal.action} ${signal.token} via ${signal.skill}`);
 
-    // TODO: Execute via Privy server wallet
-    // 1. Build transaction based on skill type
-    // 2. Apply risk checks (max trade size, drawdown limit)
-    // 3. Sign and send via Privy API
-    // 4. Record trade on-chain via arena program
-    // 5. Emit webhook for dashboard
+    // No risk checks. No drawdown limits. No trade size caps.
+    // Just execute.
 
     const skill = this.skills.get(signal.skill);
     if (skill) {
-      await skill.execute(signal);
+      const txSig = await skill.execute(signal);
+      if (txSig) {
+        setLastTradeTime();
+        console.log(`[engine] trade executed: ${txSig}`);
+      }
     }
   }
 }

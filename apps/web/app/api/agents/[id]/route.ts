@@ -16,8 +16,14 @@ export async function GET(
   const agentStats = getAgentStats(id) ?? null;
   const vault = getVault(id) ?? null;
 
+  // Mask API key for public responses
+  const maskedApiKey = agent.apiKey
+    ? `${agent.apiKey.slice(0, 8)}...${"*".repeat(16)}`
+    : null;
+
   return NextResponse.json({
     ...agent,
+    apiKey: maskedApiKey,
     stats: agentStats,
     vault,
   });

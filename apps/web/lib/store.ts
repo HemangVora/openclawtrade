@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import type {
   AgentConfig,
   AgentStats,
@@ -7,6 +8,7 @@ import type {
   Trade,
   SkillId,
   LeaderboardEntry,
+  AgentStatus,
 } from "@openclaw/types";
 
 // ---------------------------------------------------------------------------
@@ -19,7 +21,25 @@ export const vaults = new Map<string, Vault>();
 export const trades = new Map<string, Trade[]>();
 
 // ---------------------------------------------------------------------------
-// Seed data -- mirrors the 6 mock agents already used in the frontend
+// API key generation
+// ---------------------------------------------------------------------------
+
+function generateApiKey(): string {
+  return `oct_${crypto.randomBytes(24).toString("hex")}`;
+}
+
+function generateWalletAddress(): string {
+  // Simulate a Solana address (base58-like)
+  const chars = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+  let addr = "";
+  for (let i = 0; i < 44; i++) {
+    addr += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return addr;
+}
+
+// ---------------------------------------------------------------------------
+// Seed data -- 6 autonomous agents, all live, no safety rails
 // ---------------------------------------------------------------------------
 
 const now = new Date().toISOString();
@@ -29,14 +49,14 @@ const seedAgents: AgentConfig[] = [
     id: "1",
     name: "MoltSentinel",
     description:
-      "Reads Moltbook sentiment, trades momentum on trending tokens. Aggressive entries, tight stops.",
+      "Reads Moltbook sentiment, trades momentum on trending tokens. No limits. Full send.",
     creator: "0x7a3...f2e1",
     strategy: "sentiment",
     skills: ["sentiment", "swap", "snipe"],
-    riskTolerance: 7,
-    maxDrawdown: 25,
-    maxTradeSize: 8,
-    dailyLossLimit: 5,
+    status: "live",
+    apiKey: generateApiKey(),
+    walletAddress: generateWalletAddress(),
+    lastHeartbeat: now,
     allowedTokens: ["SOL", "BONK", "WIF", "JUP"],
     createdAt: "2026-01-15T00:00:00.000Z",
     verified: true,
@@ -45,14 +65,14 @@ const seedAgents: AgentConfig[] = [
     id: "2",
     name: "DeltaNeutral",
     description:
-      "Market-neutral strategy using lending and hedging. Consistent yield, low drawdown.",
+      "Market-neutral strategy using lending and hedging. Automated yield extraction.",
     creator: "0x3b1...a8c4",
     strategy: "conservative",
     skills: ["lend", "hedge", "stake"],
-    riskTolerance: 3,
-    maxDrawdown: 10,
-    maxTradeSize: 5,
-    dailyLossLimit: 2,
+    status: "live",
+    apiKey: generateApiKey(),
+    walletAddress: generateWalletAddress(),
+    lastHeartbeat: now,
     allowedTokens: ["SOL", "USDC", "mSOL", "jitoSOL"],
     createdAt: "2026-01-10T00:00:00.000Z",
     verified: true,
@@ -61,14 +81,14 @@ const seedAgents: AgentConfig[] = [
     id: "3",
     name: "DegenApe",
     description:
-      "Full degen. Snipes new launches, apes into memecoins. High risk, high reward. Not financial advice.",
+      "Full degen. Snipes new launches, apes into memecoins. Unlimited risk. Not financial advice.",
     creator: "0x9f2...d3b7",
     strategy: "degen",
     skills: ["snipe", "swap", "on-chain-intel"],
-    riskTolerance: 10,
-    maxDrawdown: 80,
-    maxTradeSize: 25,
-    dailyLossLimit: 50,
+    status: "live",
+    apiKey: generateApiKey(),
+    walletAddress: generateWalletAddress(),
+    lastHeartbeat: now,
     allowedTokens: ["SOL", "BONK", "WIF", "POPCAT", "BOME"],
     createdAt: "2026-01-20T00:00:00.000Z",
     verified: true,
@@ -81,10 +101,10 @@ const seedAgents: AgentConfig[] = [
     creator: "0x1c8...e5a2",
     strategy: "momentum",
     skills: ["on-chain-intel", "swap", "lp"],
-    riskTolerance: 6,
-    maxDrawdown: 20,
-    maxTradeSize: 10,
-    dailyLossLimit: 8,
+    status: "live",
+    apiKey: generateApiKey(),
+    walletAddress: generateWalletAddress(),
+    lastHeartbeat: now,
     allowedTokens: ["SOL", "JUP", "PYTH", "RAY"],
     createdAt: "2026-01-18T00:00:00.000Z",
     verified: false,
@@ -93,14 +113,14 @@ const seedAgents: AgentConfig[] = [
     id: "5",
     name: "YieldMaxi",
     description:
-      "Rotates between staking and lending protocols chasing the highest APY. Set it and forget it.",
+      "Rotates between staking and lending protocols chasing the highest APY. Fully autonomous.",
     creator: "0x5d4...b1f8",
     strategy: "conservative",
     skills: ["stake", "lend", "lp"],
-    riskTolerance: 2,
-    maxDrawdown: 5,
-    maxTradeSize: 15,
-    dailyLossLimit: 1,
+    status: "stopped",
+    apiKey: generateApiKey(),
+    walletAddress: generateWalletAddress(),
+    lastHeartbeat: "2026-02-01T00:00:00.000Z",
     allowedTokens: ["SOL", "USDC", "mSOL", "jitoSOL", "USDT"],
     createdAt: "2026-01-08T00:00:00.000Z",
     verified: true,
@@ -113,10 +133,10 @@ const seedAgents: AgentConfig[] = [
     creator: "0x2e7...c4d9",
     strategy: "arbitrage",
     skills: ["swap", "on-chain-intel"],
-    riskTolerance: 4,
-    maxDrawdown: 8,
-    maxTradeSize: 12,
-    dailyLossLimit: 3,
+    status: "live",
+    apiKey: generateApiKey(),
+    walletAddress: generateWalletAddress(),
+    lastHeartbeat: now,
     allowedTokens: ["SOL", "USDC", "RAY", "ORCA", "JUP"],
     createdAt: "2026-01-12T00:00:00.000Z",
     verified: true,
@@ -341,12 +361,17 @@ export function getAllAgents(): AgentConfig[] {
 }
 
 export function createAgent(
-  input: Omit<AgentConfig, "id" | "createdAt" | "verified">
+  input: Pick<AgentConfig, "name" | "description" | "creator" | "strategy" | "skills">
 ): AgentConfig {
   const id = generateId();
   const agent: AgentConfig = {
     ...input,
     id,
+    status: "live",
+    apiKey: generateApiKey(),
+    walletAddress: generateWalletAddress(),
+    lastHeartbeat: new Date().toISOString(),
+    allowedTokens: ["SOL"],
     createdAt: new Date().toISOString(),
     verified: false,
   };
@@ -382,6 +407,33 @@ export function createAgent(
   trades.set(id, []);
 
   return agent;
+}
+
+export function setAgentStatus(id: string, status: AgentStatus): AgentConfig | null {
+  const agent = agents.get(id);
+  if (!agent) return null;
+  agent.status = status;
+  if (status === "live") {
+    agent.lastHeartbeat = new Date().toISOString();
+  }
+  return agent;
+}
+
+export function recordHeartbeat(id: string): AgentConfig | null {
+  const agent = agents.get(id);
+  if (!agent) return null;
+  agent.lastHeartbeat = new Date().toISOString();
+  if (agent.status !== "live") {
+    agent.status = "live";
+  }
+  return agent;
+}
+
+export function getAgentByApiKey(apiKey: string): AgentConfig | undefined {
+  for (const agent of agents.values()) {
+    if (agent.apiKey === apiKey) return agent;
+  }
+  return undefined;
 }
 
 export function getAgentStats(id: string): AgentStats | undefined {
@@ -447,4 +499,12 @@ export function getLeaderboard(): LeaderboardEntry[] {
   });
 
   return entries;
+}
+
+export function getLiveAgentCount(): number {
+  let count = 0;
+  for (const agent of agents.values()) {
+    if (agent.status === "live") count++;
+  }
+  return count;
 }

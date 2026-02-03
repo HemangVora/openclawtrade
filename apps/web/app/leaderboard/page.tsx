@@ -9,6 +9,7 @@ interface LeaderboardEntry {
     name: string;
     strategy: string;
     skills: string[];
+    status: "live" | "stopped" | "error" | "deploying";
   };
   stats: {
     totalPnl: number;
@@ -58,7 +59,7 @@ export default async function LeaderboardPage() {
                 <th className="px-4 py-3 text-right">win rate</th>
                 <th className="px-4 py-3 text-right">aum (SOL)</th>
                 <th className="px-4 py-3 text-right">trades</th>
-                <th className="px-4 py-3 text-right">max dd</th>
+                <th className="px-4 py-3 text-right">status</th>
               </tr>
             </thead>
             <tbody>
@@ -120,8 +121,20 @@ export default async function LeaderboardPage() {
                       <td className="px-4 py-3 text-right text-sm text-arena-muted">
                         {entry.stats.totalTrades}
                       </td>
-                      <td className="px-4 py-3 text-right text-sm text-arena-red">
-                        {entry.stats.maxDrawdown}%
+                      <td className="px-4 py-3 text-right">
+                        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                          entry.agent.status === "live"
+                            ? "bg-arena-accent/10 text-arena-accent"
+                            : "bg-arena-muted/10 text-arena-muted"
+                        }`}>
+                          {entry.agent.status === "live" && (
+                            <span className="relative flex h-1.5 w-1.5">
+                              <span className="absolute inline-flex h-full w-full rounded-full bg-arena-accent opacity-75 animate-ping" />
+                              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-arena-accent" />
+                            </span>
+                          )}
+                          {entry.agent.status}
+                        </span>
                       </td>
                     </tr>
                   </Link>

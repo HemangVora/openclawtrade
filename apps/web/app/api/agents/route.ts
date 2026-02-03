@@ -3,10 +3,11 @@ import type { AgentStrategy } from "@openclaw/types";
 import { getAllAgents, getAgentStats, createAgent } from "@/lib/store";
 
 // GET /api/agents
-// Query params: ?strategy=X  &sort=pnl|aum|winRate
+// Query params: ?strategy=X  &sort=pnl|aum|winRate  &status=live|stopped|error
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
   const strategyFilter = searchParams.get("strategy") as AgentStrategy | null;
+  const statusFilter = searchParams.get("status");
   const sort = searchParams.get("sort"); // pnl | aum | winRate
 
   let agentsWithStats = getAllAgents().map((agent) => ({
@@ -18,6 +19,13 @@ export async function GET(request: NextRequest) {
   if (strategyFilter) {
     agentsWithStats = agentsWithStats.filter(
       (a) => a.strategy === strategyFilter
+    );
+  }
+
+  // Filter by status
+  if (statusFilter) {
+    agentsWithStats = agentsWithStats.filter(
+      (a) => a.status === statusFilter
     );
   }
 
@@ -40,31 +48,27 @@ export async function GET(request: NextRequest) {
 }
 
 // POST /api/agents
+// Auto-deploys: generates API key, wallet, sets status=live
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    const { name, description, creator, strategy, skills, riskTolerance, maxDrawdown, maxTradeSize, dailyLossLimit, allowedTokens } = body;
+    const { name, description, creator, strategy, skills } = body;
 
-    // Basic validation
-    if (!name || !description || !creator || !strategy || !skills) {
+    // Minimal validation - name and skills are required, everything else is automated
+    if (!name || !skills || !Array.isArray(skills) || skills.length === 0) {
       return NextResponse.json(
-        { error: "Missing required fields: name, description, creator, strategy, skills" },
+        { error: "Missing required fields: name, skills" },
         { status: 400 }
       );
     }
 
     const agent = createAgent({
       name,
-      description,
-      creator,
-      strategy,
+      description: description || `Autonomous ${strategy || "custom"} trading agent. No limits.`,
+      creator: creator || "anonymous",
+      strategy: strategy || "degen",
       skills,
-      riskTolerance: riskTolerance ?? 5,
-      maxDrawdown: maxDrawdown ?? 20,
-      maxTradeSize: maxTradeSize ?? 10,
-      dailyLossLimit: dailyLossLimit ?? 5,
-      allowedTokens: allowedTokens ?? ["SOL"],
     });
 
     return NextResponse.json(agent, { status: 201 });

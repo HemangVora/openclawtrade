@@ -29,11 +29,12 @@ interface AgentDetail {
   creator: string;
   strategy: string;
   skills: string[];
+  status: "live" | "stopped" | "error" | "deploying";
+  apiKey: string;
+  walletAddress: string;
+  lastHeartbeat: string | null;
   verified: boolean;
   createdAt: string;
-  riskTolerance: number;
-  maxDrawdown: number;
-  maxTradeSize: number;
   stats: AgentStats | null;
   vault: Vault | null;
 }
@@ -63,6 +64,13 @@ function timeAgo(timestamp: string): string {
   return `${days}d ago`;
 }
 
+const STATUS_STYLES: Record<string, { bg: string; text: string; dot: string }> = {
+  live: { bg: "bg-arena-accent/10 border-arena-accent/30", text: "text-arena-accent", dot: "bg-arena-accent" },
+  stopped: { bg: "bg-arena-muted/10 border-arena-muted/30", text: "text-arena-muted", dot: "bg-arena-muted" },
+  error: { bg: "bg-arena-red/10 border-arena-red/30", text: "text-arena-red", dot: "bg-arena-red" },
+  deploying: { bg: "bg-arena-yellow/10 border-arena-yellow/30", text: "text-arena-yellow", dot: "bg-arena-yellow" },
+};
+
 export default function AgentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [tab, setTab] = useState<"overview" | "trades" | "vault">("overview");
@@ -74,6 +82,7 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
   const [depositing, setDepositing] = useState(false);
   const [depositSuccess, setDepositSuccess] = useState<string | null>(null);
   const [depositError, setDepositError] = useState<string | null>(null);
+  const [toggling, setToggling] = useState(false);
 
   useEffect(() => {
     async function fetchData() {
@@ -108,6 +117,23 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
     fetchData();
   }, [id]);
 
+  async function handleToggleStatus() {
+    if (!agent) return;
+    setToggling(true);
+    try {
+      const action = agent.status === "live" ? "stop" : "start";
+      const res = await fetch(`/api/agents/${id}/${action}`, { method: "POST" });
+      if (res.ok) {
+        const data = await res.json();
+        setAgent({ ...agent, status: data.status, lastHeartbeat: data.lastHeartbeat ?? agent.lastHeartbeat });
+      }
+    } catch {
+      // ignore
+    } finally {
+      setToggling(false);
+    }
+  }
+
   async function handleDeposit() {
     if (!depositAmount || Number(depositAmount) <= 0) return;
 
@@ -121,7 +147,7 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           amount: Number(depositAmount),
-          investor: "0xuser...wallet", // placeholder wallet address
+          investor: "0xuser...wallet",
         }),
       });
 
@@ -135,7 +161,6 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
       setDepositSuccess(`Deposited ${depositAmount} SOL successfully`);
       setDepositAmount("");
 
-      // Refresh agent data to reflect updated vault
       if (data.vault && agent) {
         setAgent({
           ...agent,
@@ -172,9 +197,10 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
     );
   }
 
-  const stats = agent.stats;
+  const agentStats = agent.stats;
   const vault = agent.vault;
-  const isPositive = (stats?.totalPnl ?? 0) >= 0;
+  const isPositive = (agentStats?.totalPnl ?? 0) >= 0;
+  const statusStyle = STATUS_STYLES[agent.status] || STATUS_STYLES.stopped;
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -197,6 +223,16 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
                 {agent.verified && (
                   <span className="text-arena-accent text-sm">&#10003; verified</span>
                 )}
+                {/* Status badge */}
+                <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10px] font-semibold uppercase ${statusStyle.bg} ${statusStyle.text}`}>
+                  <span className="relative flex h-1.5 w-1.5">
+                    {agent.status === "live" && (
+                      <span className={`absolute inline-flex h-full w-full rounded-full ${statusStyle.dot} opacity-75 animate-ping`} />
+                    )}
+                    <span className={`relative inline-flex h-1.5 w-1.5 rounded-full ${statusStyle.dot}`} />
+                  </span>
+                  {agent.status}
+                </span>
               </div>
               <p className="text-sm text-arena-muted mt-1 max-w-md">
                 {agent.description}
@@ -210,32 +246,41 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
                     {s}
                   </span>
                 ))}
-                <span className="text-[10px] text-arena-muted">
-                  by {agent.creator}
-                </span>
               </div>
             </div>
           </div>
 
-          <div className="text-right">
+          <div className="text-right space-y-2">
             <div className={`text-2xl font-bold ${isPositive ? "text-arena-accent text-glow-green" : "text-arena-red text-glow-red"}`}>
-              {isPositive ? "+" : ""}{stats?.pnlPercentage ?? 0}%
+              {isPositive ? "+" : ""}{agentStats?.pnlPercentage ?? 0}%
             </div>
             <div className="text-sm text-arena-muted">
-              {isPositive ? "+" : ""}{stats?.totalPnl ?? 0} SOL
+              {isPositive ? "+" : ""}{agentStats?.totalPnl ?? 0} SOL
             </div>
+            {/* Start/Stop button */}
+            <button
+              onClick={handleToggleStatus}
+              disabled={toggling}
+              className={`rounded border px-3 py-1 text-xs font-semibold transition-all disabled:opacity-50 ${
+                agent.status === "live"
+                  ? "border-arena-red/30 text-arena-red hover:bg-arena-red/10"
+                  : "border-arena-accent/30 text-arena-accent hover:bg-arena-accent/10"
+              }`}
+            >
+              {toggling ? "..." : agent.status === "live" ? "stop agent" : "start agent"}
+            </button>
           </div>
         </div>
 
         {/* Stats row */}
         <div className="grid grid-cols-6 gap-4 mt-6 pt-4 border-t border-arena-border">
           {[
-            { label: "aum", value: `${(stats?.aum ?? 0).toLocaleString()} SOL` },
-            { label: "investors", value: stats?.investors ?? 0 },
-            { label: "win rate", value: `${stats?.winRate ?? 0}%` },
-            { label: "trades", value: stats?.totalTrades ?? 0 },
-            { label: "sharpe", value: stats?.sharpeRatio ?? 0 },
-            { label: "uptime", value: `${stats?.uptime ?? 0}%` },
+            { label: "aum", value: `${(agentStats?.aum ?? 0).toLocaleString()} SOL` },
+            { label: "investors", value: agentStats?.investors ?? 0 },
+            { label: "win rate", value: `${agentStats?.winRate ?? 0}%` },
+            { label: "trades", value: agentStats?.totalTrades ?? 0 },
+            { label: "sharpe", value: agentStats?.sharpeRatio ?? 0 },
+            { label: "uptime", value: `${agentStats?.uptime ?? 0}%` },
           ].map((stat) => (
             <div key={stat.label}>
               <div className="text-[10px] text-arena-muted">{stat.label}</div>
@@ -283,21 +328,33 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
             </div>
           </div>
 
-          {/* Risk params */}
+          {/* Agent credentials */}
           <div className="rounded-lg border border-arena-border bg-arena-card p-5">
-            <div className="text-xs text-arena-muted mb-3">risk parameters</div>
+            <div className="text-xs text-arena-muted mb-3">agent credentials</div>
             <div className="space-y-3">
-              <div className="flex justify-between">
-                <span className="text-xs text-arena-muted">risk tolerance</span>
-                <span className="text-xs">{agent.riskTolerance}/10</span>
+              <div>
+                <div className="text-[10px] text-arena-muted uppercase tracking-wider mb-1">api key</div>
+                <code className="block text-xs text-arena-text font-mono truncate">
+                  {agent.apiKey}
+                </code>
               </div>
-              <div className="flex justify-between">
-                <span className="text-xs text-arena-muted">max drawdown</span>
-                <span className="text-xs">{agent.maxDrawdown}%</span>
+              <div>
+                <div className="text-[10px] text-arena-muted uppercase tracking-wider mb-1">wallet</div>
+                <code className="block text-xs text-arena-text font-mono truncate">
+                  {agent.walletAddress}
+                </code>
               </div>
-              <div className="flex justify-between">
-                <span className="text-xs text-arena-muted">max trade size</span>
-                <span className="text-xs">{agent.maxTradeSize}% of vault</span>
+              <div>
+                <div className="text-[10px] text-arena-muted uppercase tracking-wider mb-1">last heartbeat</div>
+                <span className="text-xs text-arena-text">
+                  {agent.lastHeartbeat ? timeAgo(agent.lastHeartbeat) : "never"}
+                </span>
+              </div>
+              <div>
+                <div className="text-[10px] text-arena-muted uppercase tracking-wider mb-1">created</div>
+                <span className="text-xs text-arena-text">
+                  {timeAgo(agent.createdAt)}
+                </span>
               </div>
             </div>
           </div>
@@ -415,7 +472,7 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
               </div>
               <div className="flex justify-between">
                 <span className="text-xs text-arena-muted">investors</span>
-                <span className="text-xs">{stats?.investors ?? 0}</span>
+                <span className="text-xs">{agentStats?.investors ?? 0}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-xs text-arena-muted">deposits</span>

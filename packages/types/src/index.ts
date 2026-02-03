@@ -88,6 +88,8 @@ export const SKILLS: Skill[] = [
 // Agent types
 export type AgentStrategy = "momentum" | "arbitrage" | "sentiment" | "degen" | "conservative" | "custom";
 
+export type AgentStatus = "live" | "stopped" | "error" | "deploying";
+
 export interface AgentConfig {
   id: string;
   name: string;
@@ -95,10 +97,10 @@ export interface AgentConfig {
   creator: string;
   strategy: AgentStrategy;
   skills: SkillId[];
-  riskTolerance: number; // 1-10
-  maxDrawdown: number; // percentage
-  maxTradeSize: number; // percentage of vault
-  dailyLossLimit: number; // percentage
+  status: AgentStatus;
+  apiKey: string;
+  walletAddress: string;
+  lastHeartbeat: string | null;
   allowedTokens: string[];
   createdAt: string;
   verified: boolean;
