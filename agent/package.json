@@ -1,0 +1,21 @@
+{
+  "name": "@openclaw/agent",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@privy-io/server-auth": "^2.0.0",
+    "@solana/web3.js": "^1.98.0",
+    "@openclaw/types": "workspace:*",
+    "dotenv": "^16.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

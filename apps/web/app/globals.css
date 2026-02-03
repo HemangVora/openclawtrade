@@ -1,0 +1,39 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --arena-bg: #0a0a0f;
+  --arena-card: #12121a;
+  --arena-border: #1e1e2e;
+  --arena-accent: #00ff88;
+  --arena-red: #ff4444;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #1e1e2e #0a0a0f;
+}
+
+body {
+  background: var(--arena-bg);
+  color: #e0e0f0;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+@layer utilities {
+  .glow-green {
+    box-shadow: 0 0 20px rgba(0, 255, 136, 0.15), 0 0 60px rgba(0, 255, 136, 0.05);
+  }
+  .glow-red {
+    box-shadow: 0 0 20px rgba(255, 68, 68, 0.15), 0 0 60px rgba(255, 68, 68, 0.05);
+  }
+  .text-glow-green {
+    text-shadow: 0 0 10px rgba(0, 255, 136, 0.5);
+  }
+  .text-glow-red {
+    text-shadow: 0 0 10px rgba(255, 68, 68, 0.5);
+  }
+}
